@@ -11,9 +11,10 @@ import sys
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from plaid_client import PlaidClient
+# from plaid_client import PlaidClient  # Plaid code commented out
 from src.recurring_detector import detect_monthly_recurring
 from src.subscription_agent import analyze_subscriptions as ai_analyze_subscriptions
+from src.database import get_transactions_for_user  # Assume this function will fetch from DB
 
 # Load environment variables
 load_dotenv()
@@ -22,11 +23,11 @@ app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'dev_secret_key')
 
 # Initialize Plaid client
-plaid_client = PlaidClient()
+# plaid_client = PlaidClient()  # Plaid code commented out
 
 # In-memory storage (use database in production!)
 # Format: {user_id: access_token}
-user_tokens = {}
+# user_tokens = {}  # Plaid code commented out
 
 
 @app.route('/')
@@ -42,22 +43,8 @@ def create_link_token():
     Frontend calls this first to initialize Plaid Link
     """
     
-    try:
-        # In production, get user_id from session/auth
-        user_id = request.json.get('user_id', 'demo_user')
-        
-        link_token = plaid_client.create_link_token(user_id)
-        
-        return jsonify({
-            'link_token': link_token,
-            'success': True
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'error': str(e),
-            'success': False
-        }), 500
+    # Plaid code commented out
+    return jsonify({'error': 'Plaid integration disabled', 'success': False}), 501
 
 
 @app.route('/api/exchange_public_token', methods=['POST'])
@@ -67,29 +54,8 @@ def exchange_public_token():
     Called after user connects bank in Plaid Link
     """
     
-    try:
-        public_token = request.json['public_token']
-        user_id = request.json.get('user_id', 'demo_user')
-        
-        # Exchange token
-        result = plaid_client.exchange_public_token(public_token)
-        
-        # Store access token (use database in production!)
-        user_tokens[user_id] = result['access_token']
-        
-        print(f"✅ User {user_id} connected bank successfully")
-        
-        return jsonify({
-            'success': True,
-            'message': 'Bank connected successfully!',
-            'item_id': result['item_id']
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'error': str(e),
-            'success': False
-        }), 500
+    # Plaid code commented out
+    return jsonify({'error': 'Plaid integration disabled', 'success': False}), 501
 
 
 @app.route('/api/get_transactions', methods=['POST'])
@@ -100,25 +66,13 @@ def get_transactions():
     
     try:
         user_id = request.json.get('user_id', 'demo_user')
-        
-        # Get access token from storage
-        access_token = user_tokens.get(user_id)
-        
-        if not access_token:
-            return jsonify({
-                'error': 'No bank connected. Please connect your bank first.',
-                'success': False
-            }), 400
-        
-        # Fetch all transactions
-        transactions = plaid_client.get_all_transactions(access_token)
-        
+        # Fetch transactions from database
+        transactions = get_transactions_for_user(user_id)
         return jsonify({
             'success': True,
             'transactions': transactions,
             'count': len(transactions)
         })
-        
     except Exception as e:
         return jsonify({
             'error': str(e),
@@ -133,17 +87,9 @@ def analyze_subscriptions():
     """
     try:
         user_id = request.json.get('user_id', 'demo_user')
-        access_token = user_tokens.get(user_id)
-        if not access_token:
-            return jsonify({
-                'error': 'No bank connected. Please connect your bank first.',
-                'success': False
-            }), 400
-        # Fetch all transactions
-        transactions = plaid_client.get_all_transactions(access_token)
-        # Detect recurring subscriptions
+        # Fetch transactions from database
+        transactions = get_transactions_for_user(user_id)
         subscriptions = detect_monthly_recurring(transactions)
-        # AI agent analysis
         ai_analysis = ai_analyze_subscriptions(subscriptions)
         return jsonify({
             'success': True,

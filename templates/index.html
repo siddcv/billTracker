@@ -5,9 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bill & Subscription Tracker</title>
     
-    <!-- Plaid Link SDK -->
-    <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
-    
     <style>
         * {
             margin: 0;
@@ -149,9 +146,9 @@
 <body>
     <div class="container">
         <h1>💳 Bill & Subscription Tracker</h1>
-        <p class="subtitle">Connect your Chase account to automatically detect recurring charges</p>
+        <p class="subtitle">Analyze your stored transactions for recurring charges and savings opportunities</p>
         
-        <button id="link-button" class="btn">🏦 Connect Chase Account</button>
+        <button id="analyze-button" class="btn">🔍 Analyze My Subscriptions</button>
         
         <div id="status" class="status"></div>
         
@@ -187,7 +184,7 @@
         // Show/hide loading
         function setLoading(isLoading) {
             document.getElementById('loading').style.display = isLoading ? 'block' : 'none';
-            document.getElementById('link-button').disabled = isLoading;
+            document.getElementById('analyze-button').disabled = isLoading;
         }
         
         // Display transactions
@@ -347,31 +344,9 @@
         }
         
         // Connect bank button
-        document.getElementById('link-button').addEventListener('click', async () => {
-            try {
-                showStatus('Initializing Plaid Link...', 'info');
-                
-                const linkToken = await initializePlaid();
-                
-                // Create Plaid Link handler
-                const handler = Plaid.create({
-                    token: linkToken,
-                    onSuccess: onPlaidSuccess,
-                    onExit: (err, metadata) => {
-                        if (err) {
-                            showStatus(`Error: ${err.error_message}`, 'error');
-                        } else {
-                            showStatus('Bank connection cancelled', 'info');
-                        }
-                    }
-                });
-                
-                // Open Plaid Link popup
-                handler.open();
-                
-            } catch (error) {
-                showStatus(`Error: ${error.message}`, 'error');
-            }
+        document.getElementById('analyze-button').addEventListener('click', async () => {
+            showStatus('Analyzing your subscriptions...', 'info');
+            await fetchAndDisplaySubscriptions();
         });
     </script>
 </body>
