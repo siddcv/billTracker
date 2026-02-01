@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bill & Subscription Tracker</title>
+    
+    <!-- Plaid Link SDK -->
+    <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 50px auto;
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .transactions {
+            margin-top: 30px;
+            display: none;
+        }
+        
+        .transaction {
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .transaction:hover {
+            background: #f8f9fa;
+        }
+        
+        .merchant {
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .date {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .amount {
+            font-weight: 700;
+            color: #667eea;
+            font-size: 18px;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>💳 Bill & Subscription Tracker</h1>
+        <p class="subtitle">Connect your Chase account to automatically detect recurring charges</p>
+        
+        <button id="link-button" class="btn">🏦 Connect Chase Account</button>
+        
+        <div id="status" class="status"></div>
+        
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Analyzing your transactions...</p>
+        </div>
+        
+        <div id="transactions" class="transactions">
+            <h2>Your Transactions</h2>
+            <div id="transaction-list"></div>
+        </div>
+    </div>
+    
+    <script>
+        const userId = 'demo_user'; // In production, get from auth
+        
+        // Show status message
+        function showStatus(message, type = 'info') {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = `status ${type}`;
+            statusEl.style.display = 'block';
+        }
+        
+        // Show/hide loading
+        function setLoading(isLoading) {
+            document.getElementById('loading').style.display = isLoading ? 'block' : 'none';
+            document.getElementById('link-button').disabled = isLoading;
+        }
+        
+        // Display transactions
+        function displayTransactions(transactions) {
+            const listEl = document.getElementById('transaction-list');
+            const containerEl = document.getElementById('transactions');
+            
+            if (transactions.length === 0) {
+                listEl.innerHTML = '<p>No transactions found.</p>';
+                containerEl.style.display = 'block';
+                return;
+            }
+            
+            listEl.innerHTML = transactions.map(txn => `
+                <div class="transaction">
+                    <div>
+                        <div class="merchant">${txn.merchant}</div>
+                        <div class="date">${txn.date}</div>
+                    </div>
+                    <div class="amount">$${txn.amount.toFixed(2)}</div>
+                </div>
+            `).join('');
+            
+            containerEl.style.display = 'block';
+        }
+        
+        // Step 1: Initialize Plaid Link
+        async function initializePlaid() {
+            try {
+                const response = await fetch('/api/create_link_token', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({user_id: userId})
+                });
+                
+                const data = await response.json();
+                
+                if (!data.success) {
+                    throw new Error(data.error);
+                }
+                
+                return data.link_token;
+                
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+        
+        // Step 2: Handle successful bank connection
+        async function onPlaidSuccess(public_token, metadata) {
+            console.log('Bank connected!', metadata);
+            showStatus('Bank connected! Fetching transactions...', 'success');
+            
+            try {
+                // Exchange public token
+                const exchangeResponse = await fetch('/api/exchange_public_token', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        public_token: public_token,
+                        user_id: userId
+                    })
+                });
+                
+                const exchangeData = await exchangeResponse.json();
+                
+                if (!exchangeData.success) {
+                    throw new Error(exchangeData.error);
+                }
+                
+                // Fetch transactions
+                setLoading(true);
+                
+                const txnResponse = await fetch('/api/get_transactions', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({user_id: userId})
+                });
+                
+                const txnData = await txnResponse.json();
+                
+                setLoading(false);
+                
+                if (!txnData.success) {
+                    throw new Error(txnData.error);
+                }
+                
+                showStatus(`✅ Loaded ${txnData.count} transactions`, 'success');
+                displayTransactions(txnData.transactions);
+                
+            } catch (error) {
+                setLoading(false);
+                showStatus(`Error: ${error.message}`, 'error');
+            }
+        }
+        
+        // Connect bank button
+        document.getElementById('link-button').addEventListener('click', async () => {
+            try {
+                showStatus('Initializing Plaid Link...', 'info');
+                
+                const linkToken = await initializePlaid();
+                
+                // Create Plaid Link handler
+                const handler = Plaid.create({
+                    token: linkToken,
+                    onSuccess: onPlaidSuccess,
+                    onExit: (err, metadata) => {
+                        if (err) {
+                            showStatus(`Error: ${err.error_message}`, 'error');
+                        } else {
+                            showStatus('Bank connection cancelled', 'info');
+                        }
+                    }
+                });
+                
+                // Open Plaid Link popup
+                handler.open();
+                
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, 'error');
+            }
+        });
+    </script>
+</body>
+</html>
