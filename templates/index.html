@@ -164,6 +164,13 @@
             <h2>Your Transactions</h2>
             <div id="transaction-list"></div>
         </div>
+
+        <!-- Subscription Dashboard -->
+        <div id="subscriptions" style="display:none; margin-top:40px;">
+            <h2>📋 Detected Subscriptions</h2>
+            <div id="subscription-list"></div>
+            <div id="ai-analysis" style="margin-top:30px;"></div>
+        </div>
     </div>
     
     <script>
@@ -207,6 +214,65 @@
             containerEl.style.display = 'block';
         }
         
+        // Display subscriptions and AI analysis
+        function displaySubscriptions(subscriptions, analysis) {
+            const subList = document.getElementById('subscription-list');
+            const subSection = document.getElementById('subscriptions');
+            const aiSection = document.getElementById('ai-analysis');
+            if (!subscriptions.length) {
+                subList.innerHTML = '<p>No recurring subscriptions found.</p>';
+                aiSection.innerHTML = '';
+                subSection.style.display = 'block';
+                return;
+            }
+            subList.innerHTML = subscriptions.map(sub => `
+                <div class="transaction">
+                    <div>
+                        <div class="merchant">${sub.merchant}</div>
+                        <div class="date">Next charge: ${sub.next_charge_date}</div>
+                        <div class="date">Frequency: ${sub.frequency}, Confidence: ${(sub.confidence*100).toFixed(0)}%</div>
+                    </div>
+                    <div class="amount">$${sub.amount.toFixed(2)}</div>
+                </div>
+            `).join('');
+            // AI analysis
+            aiSection.innerHTML = `
+                <h3>💡 AI Insights</h3>
+                <p><strong>Summary:</strong> ${analysis.summary}</p>
+                <ul>
+                    ${analysis.savings_opportunities.map(s => `<li>${s.suggestion}</li>`).join('')}
+                </ul>
+                <p><strong>Total potential savings:</strong> $${analysis.total_potential_savings.toFixed(2)}/year</p>
+                <h4>Cancellation Help</h4>
+                <ul>
+                    ${analysis.cancel_instructions.map(c => `<li><strong>${c.merchant}:</strong> <a href='${c.url}' target='_blank'>Cancel here</a><ul>${c.steps.map(step => `<li>${step}</li>`).join('')}</ul></li>`).join('')}
+                </ul>
+            `;
+            subSection.style.display = 'block';
+        }
+
+        // Fetch and display subscriptions after transactions
+        async function fetchAndDisplaySubscriptions() {
+            setLoading(true);
+            try {
+                const response = await fetch('/api/analyze_subscriptions', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({user_id: userId})
+                });
+                const data = await response.json();
+                setLoading(false);
+                if (!data.success) {
+                    showStatus(`Error: ${data.error}`, 'error');
+                    return;
+                }
+                displaySubscriptions(data.subscriptions, data.analysis);
+            } catch (error) {
+                setLoading(false);
+                showStatus(`Error: ${error.message}`, 'error');
+            }
+        }
+
         // Step 1: Initialize Plaid Link
         async function initializePlaid() {
             try {
@@ -271,6 +337,8 @@
                 
                 showStatus(`✅ Loaded ${txnData.count} transactions`, 'success');
                 displayTransactions(txnData.transactions);
+                // Fetch and display subscriptions/AI analysis
+                fetchAndDisplaySubscriptions();
                 
             } catch (error) {
                 setLoading(false);

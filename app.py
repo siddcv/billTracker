@@ -12,6 +12,8 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from plaid_client import PlaidClient
+from src.recurring_detector import detect_monthly_recurring
+from src.subscription_agent import analyze_subscriptions as ai_analyze_subscriptions
 
 # Load environment variables
 load_dotenv()
@@ -117,6 +119,38 @@ def get_transactions():
             'count': len(transactions)
         })
         
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'success': False
+        }), 500
+
+
+@app.route('/api/analyze_subscriptions', methods=['POST'])
+def analyze_subscriptions():
+    """
+    Analyze subscriptions: detect recurring, return details and AI analysis
+    """
+    try:
+        user_id = request.json.get('user_id', 'demo_user')
+        access_token = user_tokens.get(user_id)
+        if not access_token:
+            return jsonify({
+                'error': 'No bank connected. Please connect your bank first.',
+                'success': False
+            }), 400
+        # Fetch all transactions
+        transactions = plaid_client.get_all_transactions(access_token)
+        # Detect recurring subscriptions
+        subscriptions = detect_monthly_recurring(transactions)
+        # AI agent analysis
+        ai_analysis = ai_analyze_subscriptions(subscriptions)
+        return jsonify({
+            'success': True,
+            'subscriptions': subscriptions,
+            'count': len(subscriptions),
+            'analysis': ai_analysis
+        })
     except Exception as e:
         return jsonify({
             'error': str(e),
